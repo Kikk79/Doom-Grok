@@ -2,6 +2,7 @@
 #include "engine/camera/camera.hpp"
 #include "engine/map/map.hpp"
 #include "engine/renderer/raycast.hpp"
+#include "game/player.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -24,10 +25,12 @@ struct Monster {
   float attack_cd = 0.0f;        // seconds until next melee swing
 };
 
-// Melee tuning (Slice 5).
-constexpr float kMeleeRange = 0.9f;
-constexpr float kMeleeCooldown = 0.7f;
-constexpr int kMeleeDamage = 10;
+// Melee tuning (Slice 5 / TEAM-Leader).
+constexpr float kMeleeRange = 0.55f;
+constexpr float kMeleeCooldown = 0.9f;  // monster-side; Player i-frames also apply
+
+// type_id == 2 → 15, else 10 (Imp-like / default).
+inline int melee_damage_for(int type_id) { return type_id == 2 ? 15 : 10; }
 
 // Fill defaults from map spawn type_id (1 = Imp-like, 2 / other = tougher/slower).
 Monster make_monster(int type_id, Vec2 pos);
@@ -35,9 +38,9 @@ Monster make_monster(int type_id, Vec2 pos);
 // Spawn all Kind::Monster entries from map.spawns().
 std::vector<Monster> spawn_from_map(const Map& map);
 
-// Per-frame AI: LOS → Chase; close + (LOS|chasing) → Attack + melee.
-// Returns total melee damage dealt to the player this tick (0 if none).
-int update(std::vector<Monster>& monsters, const Map& map, Vec2 player_pos, float dt);
+// Per-frame AI: Idle → (LOS) Chase → (dist ≤ kMeleeRange + LOS|aggro) Attack.
+// Calls player.take_damage on swing (respects Player i-frames).
+void update(std::vector<Monster>& monsters, const Map& map, Player& player, float dt);
 
 // Hitscan along ray: closest alive monster within radius before a wall.
 // Reduces HP; sets alive=false when hp <= 0. Returns true if a monster was hit.
