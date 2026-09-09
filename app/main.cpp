@@ -1,5 +1,4 @@
 #include "engine/camera/camera.hpp"
-#include "engine/collision/collision.hpp"
 #include "engine/input/input.hpp"
 #include "engine/map/map.hpp"
 #include "engine/renderer/raycast.hpp"
@@ -9,9 +8,10 @@
 
 #include <SDL.h>
 
-#include <cmath>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -41,13 +41,32 @@ std::string find_map_path() {
   return "levels/demo.map";
 }
 
-void rotate_camera(Camera& cam, float angle) {
-  const float c = std::cos(angle);
-  const float s = std::sin(angle);
-  const Vec2 d = cam.dir;
-  const Vec2 p = cam.plane;
-  cam.dir = {d.x * c - d.y * s, d.x * s + d.y * c};
-  cam.plane = {p.x * c - p.y * s, p.x * s + p.y * c};
+// Brief white flash + center crosshair tick for hitscan feedback.
+void apply_muzzle_flash(Renderer::FrameBuffer& fb, float strength) {
+  if (strength <= 0.0f || fb.width <= 0 || fb.height <= 0) return;
+  strength = std::clamp(strength, 0.0f, 1.0f);
+  const int w = fb.width;
+  const int h = fb.height;
+  const uint32_t add = static_cast<uint32_t>(180.0f * strength);
+  for (int i = 0; i < w * h; ++i) {
+    uint32_t p = fb.pixels[static_cast<size_t>(i)];
+    uint32_t r = std::min(255u, ((p >> 16) & 0xFFu) + add);
+    uint32_t g = std::min(255u, ((p >> 8) & 0xFFu) + add);
+    uint32_t b = std::min(255u, (p & 0xFFu) + add);
+    fb.pixels[static_cast<size_t>(i)] = 0xFF000000u | (r << 16) | (g << 8) | b;
+  }
+  // Small center marker
+  const int cx = w / 2;
+  const int cy = h / 2;
+  const uint32_t mark = 0xFFFFFFFFu;
+  for (int dx = -2; dx <= 2; ++dx) {
+    const int x = cx + dx;
+    if (x >= 0 && x < w) fb.pixels[static_cast<size_t>(cy * w + x)] = mark;
+  }
+  for (int dy = -2; dy <= 2; ++dy) {
+    const int y = cy + dy;
+    if (y >= 0 && y < h) fb.pixels[static_cast<size_t>(y * w + cx)] = mark;
+  }
 }
 
 }  // namespace
@@ -107,6 +126,7 @@ int main(int argc, char** argv) {
   std::printf("Loaded map %s (%dx%d)\n", map_path.c_str(), map.width(), map.height());
 
   Player player;
+  Camera camera;
   Vec2 start{2.5f, 2.5f};
   Vec2 facing{1.0f, 0.0f};
   for (const auto& s : map.spawns()) {
@@ -115,7 +135,8 @@ int main(int argc, char** argv) {
       break;
     }
   }
-  player.camera.set_pose(start, facing);
+  player.set_pose(start, facing);
+  player.sync_camera(camera);
 
   // AI stubs from monster spawns
   std::vector<AI::Agent> agents;
@@ -142,10 +163,14 @@ int main(int argc, char** argv) {
 
   while (running) {
     input.begin_frame();
+    bool mouse_fire = false;
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) running = false;
       if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) running = false;
+      if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        mouse_fire = true;
+      }
       input.feed_sdl(e);
     }
 
@@ -156,49 +181,23 @@ int main(int argc, char** argv) {
     const int steps = clock.consume(frame_dt);
     const float dt = static_cast<float>(Timing::kFixedDt);
 
-    // Mouse look once per rendered frame (not per fixed step)
-    {
-      const Vec2 md = input.mouse_delta();
-      if (md.x != 0.0f) rotate_camera(player.camera, md.x * player.mouse_sens);
-    }
+    // Look once per rendered frame, then sync camera.
+    player.apply_look(input, input.mouse_delta().x);
 
     for (int i = 0; i < steps; ++i) {
-      // Turn with arrows
-      float turn = 0.0f;
-      if (input.key_down(SDL_SCANCODE_LEFT)) turn -= player.turn_speed * dt;
-      if (input.key_down(SDL_SCANCODE_RIGHT)) turn += player.turn_speed * dt;
-      if (turn != 0.0f) rotate_camera(player.camera, turn);
-
-      // WASD + up/down arrows move in camera space
-      Vec2 wish{0.0f, 0.0f};
-      if (input.key_down(SDL_SCANCODE_W) || input.key_down(SDL_SCANCODE_UP)) {
-        wish.x += player.camera.dir.x;
-        wish.y += player.camera.dir.y;
-      }
-      if (input.key_down(SDL_SCANCODE_S) || input.key_down(SDL_SCANCODE_DOWN)) {
-        wish.x -= player.camera.dir.x;
-        wish.y -= player.camera.dir.y;
-      }
-      if (input.key_down(SDL_SCANCODE_A)) {
-        wish.x -= player.camera.dir.y;
-        wish.y += player.camera.dir.x;
-      }
-      if (input.key_down(SDL_SCANCODE_D)) {
-        wish.x += player.camera.dir.y;
-        wish.y -= player.camera.dir.x;
-      }
-      const float wlen = std::sqrt(wish.x * wish.x + wish.y * wish.y);
-      Vec2 vel{0.0f, 0.0f};
-      if (wlen > 1e-6f) {
-        vel.x = (wish.x / wlen) * player.move_speed * dt;
-        vel.y = (wish.y / wlen) * player.move_speed * dt;
-      }
-      player.camera.pos = Collision::move(map, player.camera.pos, vel, player.radius);
-
+      player.update(map, input, dt);
       for (auto& a : agents) AI::tick_stub(a, dt);
     }
 
-    Renderer::raycast_view(map, player.camera, fb);
+    // Hitscan: edge-triggered (LMB this frame or Space/Ctrl pressed)
+    player.try_fire(map, input, mouse_fire);
+    player.sync_camera(camera);
+    player.tick_fx(static_cast<float>(frame_dt));
+
+    Renderer::raycast_view(map, camera, fb);
+    if (player.muzzle_flash > 0.0f) {
+      apply_muzzle_flash(fb, player.muzzle_flash / 0.08f);
+    }
     Renderer::present(renderer, texture, fb);
   }
 
