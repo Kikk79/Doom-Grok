@@ -1,11 +1,8 @@
 #pragma once
-#include "ai/ai.hpp"
 #include "engine/camera/camera.hpp"
 #include "engine/collision/collision.hpp"
 #include "engine/input/input.hpp"
 #include "engine/map/map.hpp"
-
-#include <vector>
 
 // Canonical gameplay pose lives here; Camera follows via sync_camera().
 struct Player {
@@ -27,24 +24,20 @@ struct Player {
   float last_hit_dist = -1.0f;
   int last_hit_tx = -1;
   int last_hit_ty = -1;
-  bool last_hit_monster = false;
 
   void set_pose(Vec2 p, Vec2 d);
 
   // Mouse look once per rendered frame (not per fixed step).
   void apply_look(const Input& input, float mouse_dx);
 
-  // Fixed-step: turn keys + WASD -> Collision::move.
+  // Fixed-step: turn keys + WASD → Collision::move.
   void update(const Map& map, const Input& input, float dt);
 
   // Edge-triggered hitscan; mouse_clicked from SDL in app layer.
   // Fire: LMB / Space / LCtrl / RCtrl.
-  // Slice 4: if monsters != nullptr, damages nearest monster along ray
-  // (closer than wall) via AI::hitscan; else wall-only (Slice 2/3).
-  bool try_fire(const Map& map, const Input& input, bool mouse_clicked,
-                std::vector<AI::Monster>* monsters = nullptr);
+  bool try_fire(const Map& map, const Input& input, bool mouse_clicked);
 
-  // Slice 3: Use (E / F) — raycast/world_to_tile ahead (~1 unit) -> Map::try_open_door.
+  // Slice 3: Use (E / F) — raycast/world_to_tile ahead (~1 unit) → Map::try_open_door.
   bool try_use(Map& map, const Input& input);
 
   // Camera::set_pose follows player pose.
