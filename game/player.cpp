@@ -1,6 +1,5 @@
 #include "player.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -39,6 +38,7 @@ void Player::apply_look(const Input& /*input*/, float mouse_dx) {
 }
 
 void Player::update(const Map& map, const Input& input, float dt) {
+  if (!alive()) return;
   float turn = 0.0f;
   if (input.key_down(SDL_SCANCODE_LEFT)) turn -= turn_speed * dt;
   if (input.key_down(SDL_SCANCODE_RIGHT)) turn += turn_speed * dt;
@@ -72,6 +72,7 @@ void Player::update(const Map& map, const Input& input, float dt) {
 }
 
 bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
+  if (!alive()) return false;
   const bool key_fire =
       input.key_pressed(SDL_SCANCODE_SPACE) ||
       input.key_pressed(SDL_SCANCODE_LCTRL) ||
@@ -97,6 +98,7 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
 }
 
 bool Player::try_use(Map& map, const Input& input) {
+  if (!alive()) return false;
   if (!input.key_pressed(SDL_SCANCODE_E) && !input.key_pressed(SDL_SCANCODE_F)) {
     return false;
   }
@@ -118,43 +120,43 @@ bool Player::try_use(Map& map, const Input& input) {
   return true;
 }
 
+void Player::sync_camera(Camera& cam) const {
+  cam.set_pose(pos, dir);
+}
+
 bool Player::take_damage(int amount) {
-  if (amount <= 0) return false;
-  if (invuln > 0.0f) return false;
-  if (health <= 0) return false;
+  if (amount <= 0 || !alive() || invuln_t > 0.0f) return false;
 
-  int remaining = amount;
+  invuln_t = kIFrameSec;
+
+  int to_hp = amount;
   if (armor > 0) {
-    const int absorbed = std::min(armor, remaining);
+    // Absorb roughly half the hit into armor (classic-lite).
+    int absorbed = amount / 2;
+    if (absorbed < 1) absorbed = 1;
+    if (absorbed > armor) absorbed = armor;
     armor -= absorbed;
-    remaining -= absorbed;
+    to_hp = amount - absorbed;
   }
-  if (remaining > 0) {
-    health -= remaining;
-    if (health < 0) health = 0;
-  }
+  if (to_hp < 0) to_hp = 0;
+  health -= to_hp;
+  if (health < 0) health = 0;
 
-  invuln = kInvulnTime;
-  damage_flash = kDamageFlashTime;
-  std::printf("player damaged %d -> health=%d armor=%d invuln=%.2f\n",
-              amount, health, armor, invuln);
+  std::printf("player hurt -%d (armor left=%d) -> health=%d%s\n",
+              amount, armor, health, alive() ? "" : " DEAD");
   return true;
 }
 
-void Player::reset_vitals() {
+void Player::reset_vitals(Vec2 spawn_pos, Vec2 spawn_dir) {
+  set_pose(spawn_pos, spawn_dir);
   health = 100;
   armor = 0;
   ammo = 0;
-  invuln = 0.0f;
-  damage_flash = 0.0f;
+  invuln_t = 0.0f;
   muzzle_flash = 0.0f;
   last_hit_dist = -1.0f;
   last_hit_tx = -1;
   last_hit_ty = -1;
-}
-
-void Player::sync_camera(Camera& cam) const {
-  cam.set_pose(pos, dir);
 }
 
 void Player::tick_fx(float frame_dt) {
@@ -162,12 +164,8 @@ void Player::tick_fx(float frame_dt) {
     muzzle_flash -= frame_dt;
     if (muzzle_flash < 0.0f) muzzle_flash = 0.0f;
   }
-  if (invuln > 0.0f) {
-    invuln -= frame_dt;
-    if (invuln < 0.0f) invuln = 0.0f;
-  }
-  if (damage_flash > 0.0f) {
-    damage_flash -= frame_dt;
-    if (damage_flash < 0.0f) damage_flash = 0.0f;
+  if (invuln_t > 0.0f) {
+    invuln_t -= frame_dt;
+    if (invuln_t < 0.0f) invuln_t = 0.0f;
   }
 }
