@@ -4,6 +4,14 @@
 #include "engine/input/input.hpp"
 #include "engine/map/map.hpp"
 
+#include <vector>
+
+// Slice 10 — weapon slots (keys 1/2).
+enum class Weapon : int {
+  Pistol = 1,
+  Shotgun = 2,
+};
+
 // Canonical gameplay pose lives here; Camera follows via sync_camera().
 struct Player {
   Vec2 pos{0.0f, 0.0f};
@@ -18,6 +26,12 @@ struct Player {
   int health = 100;
   int armor = 0;
   int ammo = 0;  // stub (type_id 11 may bump armor or ammo)
+
+  // Slice 10 weapons
+  Weapon weapon = Weapon::Pistol;
+  // Filled by try_fire: unit dirs for each pellet/ray (app runs apply_hitscan per dir).
+  std::vector<Vec2> last_shot_dirs;
+  int last_shot_damage = 25;  // per ray
 
   // Slice 5: brief invulnerability after a hit (seconds remaining).
   float invuln_t = 0.0f;
@@ -35,10 +49,13 @@ struct Player {
   void apply_look(const Input& input, float mouse_dx);
 
   // Fixed-step: turn keys + WASD → Collision::move. No-op if dead.
+  // Also handles weapon switch 1/2 (edge via key_pressed).
   void update(const Map& map, const Input& input, float dt);
 
-  // Edge-triggered hitscan; mouse_clicked from SDL in app layer.
+  // Edge-triggered fire; mouse_clicked from SDL in app layer.
   // Fire: LMB / Space / LCtrl / RCtrl.
+  // On success: fills last_shot_dirs + last_shot_damage, plays Fire SFX, muzzle flash.
+  // Pistol: 1 ray / 25 dmg. Shotgun: 5 pellets with spread / 10 dmg each.
   bool try_fire(const Map& map, const Input& input, bool mouse_clicked);
 
   // Slice 3: Use (E / F) — raycast/world_to_tile ahead (~1 unit) → Map::try_open_door.

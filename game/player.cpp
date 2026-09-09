@@ -40,6 +40,8 @@ void Player::apply_look(const Input& /*input*/, float mouse_dx) {
 
 void Player::update(const Map& map, const Input& input, float dt) {
   if (!alive()) return;
+  if (input.key_pressed(SDL_SCANCODE_1)) weapon = Weapon::Pistol;
+  if (input.key_pressed(SDL_SCANCODE_2)) weapon = Weapon::Shotgun;
   float turn = 0.0f;
   if (input.key_down(SDL_SCANCODE_LEFT)) turn -= turn_speed * dt;
   if (input.key_down(SDL_SCANCODE_RIGHT)) turn += turn_speed * dt;
@@ -80,20 +82,45 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
       input.key_pressed(SDL_SCANCODE_RCTRL);
   if (!mouse_clicked && !key_fire) return false;
 
+  last_shot_dirs.clear();
   constexpr float kMaxDist = 64.0f;
+
+  auto rot = [](Vec2 d, float ang) {
+    const float c = std::cos(ang);
+    const float s = std::sin(ang);
+    return Vec2{d.x * c - d.y * s, d.x * s + d.y * c};
+  };
+
+  if (weapon == Weapon::Shotgun) {
+    // 5 pellets, ± spread ~±6° (±0.105 rad)
+    last_shot_damage = 10;
+    constexpr float kSpread[] = {-0.105f, -0.052f, 0.0f, 0.052f, 0.105f};
+    for (float a : kSpread) {
+      Vec2 pd = rot(dir, a);
+      const float len = std::sqrt(pd.x * pd.x + pd.y * pd.y);
+      if (len > 1e-6f) { pd.x /= len; pd.y /= len; }
+      last_shot_dirs.push_back(pd);
+    }
+  } else {
+    last_shot_damage = 25;
+    last_shot_dirs.push_back(dir);
+  }
+
+  // Wall feedback from center ray (player facing)
   const Collision::RayHit hit = Collision::raycast(map, pos, dir, kMaxDist);
-  muzzle_flash = 0.08f;  // brief screen flash
+  muzzle_flash = (weapon == Weapon::Shotgun) ? 0.12f : 0.08f;
   if (hit.hit) {
     last_hit_dist = hit.dist;
     last_hit_tx = hit.tx;
     last_hit_ty = hit.ty;
-    std::printf("hitscan wall hit dist=%.2f tile=(%d,%d)\n",
-                hit.dist, hit.tx, hit.ty);
+    std::printf("hitscan wall hit dist=%.2f tile=(%d,%d) weapon=%d pellets=%zu\n",
+                hit.dist, hit.tx, hit.ty, static_cast<int>(weapon), last_shot_dirs.size());
   } else {
     last_hit_dist = -1.0f;
     last_hit_tx = -1;
     last_hit_ty = -1;
-    std::printf("hitscan miss\n");
+    std::printf("hitscan miss weapon=%d pellets=%zu\n",
+                static_cast<int>(weapon), last_shot_dirs.size());
   }
   Audio::play(Audio::Sfx::Fire);
   return true;
@@ -156,6 +183,9 @@ void Player::reset_vitals(Vec2 spawn_pos, Vec2 spawn_dir) {
   health = 100;
   armor = 0;
   ammo = 0;
+  weapon = Weapon::Pistol;
+  last_shot_dirs.clear();
+  last_shot_damage = 25;
   invuln_t = 0.0f;
   muzzle_flash = 0.0f;
   last_hit_dist = -1.0f;
