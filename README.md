@@ -70,6 +70,8 @@ sleep 1; kill %1 2>/dev/null || true
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
 | R | Restart current level (after game over / YOU WIN / campaign complete) |
 | N | Next map after YOU WIN (demo → e1m2); no-op on e1m2 COMPLETE |
+| 1 | Pistol (1 ray, 25 dmg) |
+| 2 | Shotgun (5 pellets, ±~6°, 10 dmg each) |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
@@ -141,6 +143,16 @@ Level list: `{"levels/demo.map", "levels/e1m2.map"}` (app wiring; Map::load alre
 - **Smoke:** `--smoke` does **not** init audio (no device required).
 - **APIs:** public game / AI / other engine APIs unchanged — small `Audio` module only.
 
+
+## Slice 10 — shotgun + weapon switch
+
+- **Weapons:** key **1** = Pistol (1 ray, 25 dmg); key **2** = Shotgun (5 pellets, ±~6° / ±0.105 rad, 10 dmg each).
+- **Fire:** `Player::try_fire` fills `last_shot_dirs` + `last_shot_damage`, plays `Audio::Fire` once; app loops `AI::apply_hitscan` per pellet dir (MonsterDeath on kills).
+- **HUD:** active weapon slot highlighted (1 pistol / 2 shotgun).
+- **Restart:** `reset_vitals` returns to Pistol.
+- **Smoke:** pistol 1×25; shotgun 5 dirs + multi hitscan kill.
+- Engine APIs unchanged — `game/` + app fire loop only.
+
 ## Layout
 
 ```
@@ -153,7 +165,7 @@ engine/
   timing/            — fixed timestep 1/60
   input/             — keyboard + mouse delta
   map/               — tile map loader + set_tile / try_open_door
-game/                — player pose, movement, hitscan, use/doors, vitals, damage
+game/                — player pose, movement, weapons/hitscan, use/doors, vitals, damage
 ai/                  — Monster spawn, Idle/Chase/Attack AI, hitscan, melee, billboards
 levels/demo.map      — 16×16 campaign map 1
 levels/e1m2.map      — 16×16 campaign map 2 (two chambers)
