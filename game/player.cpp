@@ -95,6 +95,42 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
   return true;
 }
 
+bool Player::try_use(Map& map, const Input& input) {
+  if (!input.key_pressed(SDL_SCANCODE_E) && !input.key_pressed(SDL_SCANCODE_F)) {
+    return false;
+  }
+
+  auto try_open_at = [&](int tx, int ty) -> bool {
+    if (map.tile_at(tx, ty) != Tile::DoorClosed) return false;
+    if (!map.try_set_tile(tx, ty, Tile::DoorOpen)) return false;
+    std::printf("door opened at (%d,%d)\n", tx, ty);
+    return true;
+  };
+
+  // Prefer tiles along facing within ~1 unit
+  constexpr float kReach = 1.0f;
+  for (float d = 0.35f; d <= kReach + 1e-3f; d += 0.35f) {
+    const int tx = static_cast<int>(std::floor(pos.x + dir.x * d));
+    const int ty = static_cast<int>(std::floor(pos.y + dir.y * d));
+    if (try_open_at(tx, ty)) return true;
+  }
+
+  // Adjacent tiles with center within ~1 unit of player
+  const int ptx = static_cast<int>(std::floor(pos.x));
+  const int pty = static_cast<int>(std::floor(pos.y));
+  for (int ty = pty - 1; ty <= pty + 1; ++ty) {
+    for (int tx = ptx - 1; tx <= ptx + 1; ++tx) {
+      const float cx = static_cast<float>(tx) + 0.5f;
+      const float cy = static_cast<float>(ty) + 0.5f;
+      const float dx = cx - pos.x;
+      const float dy = cy - pos.y;
+      if (dx * dx + dy * dy > kReach * kReach) continue;
+      if (try_open_at(tx, ty)) return true;
+    }
+  }
+  return false;
+}
+
 void Player::sync_camera(Camera& cam) const {
   cam.set_pose(pos, dir);
 }

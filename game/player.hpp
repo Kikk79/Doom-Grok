@@ -14,6 +14,11 @@ struct Player {
   float turn_speed = 2.5f;   // radians / second
   float mouse_sens = 0.003f;
 
+  // Slice 3 vitals
+  int health = 100;
+  int armor = 0;
+  int ammo = 0;  // stub (type_id 11 may bump armor or ammo)
+
   // Hitscan feedback (seconds remaining / last wall hit distance)
   float muzzle_flash = 0.0f;
   float last_hit_dist = -1.0f;
@@ -31,6 +36,9 @@ struct Player {
   // Edge-triggered hitscan; mouse_clicked from SDL in app layer.
   // Fire: LMB / Space / LCtrl / RCtrl.
   bool try_fire(const Map& map, const Input& input, bool mouse_clicked);
+
+  // Slice 3: Use (E / F) — open adjacent/facing DoorClosed within ~1 unit.
+  bool try_use(Map& map, const Input& input);
 
   // Camera::set_pose follows player pose.
   void sync_camera(Camera& cam) const;
