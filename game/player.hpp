@@ -25,7 +25,9 @@ struct Player {
   // Vitals
   int health = 100;
   int armor = 0;
-  int ammo = 0;  // stub (type_id 11 may bump armor or ammo)
+  // Slice 11 — separate magazines (type_id 12 bullets / 13 shells).
+  int ammo_bullet = 50;  // pistol
+  int ammo_shell = 8;    // shotgun (1 shell per blast)
 
   // Slice 10 weapons
   Weapon weapon = Weapon::Pistol;
@@ -52,8 +54,13 @@ struct Player {
   // Also handles weapon switch 1/2 (edge via key_pressed).
   void update(const Map& map, const Input& input, float dt);
 
+  // Current magazine for HUD / empty-check.
+  int active_ammo() const {
+    return weapon == Weapon::Shotgun ? ammo_shell : ammo_bullet;
+  }
+
   // Edge-triggered fire; mouse_clicked from SDL in app layer.
-  // Fire: LMB / Space / LCtrl / RCtrl.
+  // Fire: LMB / Space / LCtrl / RCtrl. Consumes 1 bullet or 1 shell; empty → no-op.
   // On success: fills last_shot_dirs + last_shot_damage, plays Fire SFX, muzzle flash.
   // Pistol: 1 ray / 25 dmg. Shotgun: 5 pellets with spread / 10 dmg each.
   bool try_fire(const Map& map, const Input& input, bool mouse_clicked);
