@@ -50,7 +50,7 @@ bool hits_wall(const Map& map, Vec2 from, Vec2 to) {
 }
 
 RayHit raycast(const Map& map, Vec2 from, Vec2 dir, float max_dist) {
-  RayHit result{false, max_dist, from, 0, 0};
+  RayHit result{false, max_dist, from, 0, 0, 0};
 
   float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
   if (len < 1e-8f || max_dist <= 0.0f) return result;
@@ -105,7 +105,7 @@ RayHit raycast(const Map& map, Vec2 from, Vec2 dir, float max_dist) {
       result.point = {from.x + dir.x * traveled, from.y + dir.y * traveled};
       result.tx = map_x;
       result.ty = map_y;
-      (void)side;
+      result.side = side;
       return result;
     }
   }
