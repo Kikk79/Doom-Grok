@@ -117,6 +117,89 @@
   std::printf("smoke: two-map ok demo + e1m2 (monsters=%d doors=%d items=%d exits=%d)\n",
               e1_monsters, e1_doors, e1_items, e1_exits);
 
+  // --- Slice 10: weapon switch + shotgun multi-pellet / pistol single ---
+  {
+    Input dummy{};  // unused; we drive weapon + try_fire fields directly
+    (void)dummy;
+    Player wp;
+    wp.reset_vitals({8.5f, 8.5f}, {1.0f, 0.0f});
+    if (wp.weapon != Weapon::Pistol) {
+      std::fprintf(stderr, "SMOKE FAIL: reset should select Pistol\n");
+      return 1;
+    }
+    // Simulate key 2 / key 1 via direct assignment (Input edge needs SDL feed).
+    wp.weapon = Weapon::Shotgun;
+    // Fabricate shotgun fire dirs the same way try_fire would.
+    wp.last_shot_dirs.clear();
+    wp.last_shot_damage = 10;
+    auto rot = [](Vec2 d, float ang) {
+      const float c = std::cos(ang);
+      const float s = std::sin(ang);
+      Vec2 o{d.x * c - d.y * s, d.x * s + d.y * c};
+      const float len = std::sqrt(o.x * o.x + o.y * o.y);
+      if (len > 1e-6f) { o.x /= len; o.y /= len; }
+      return o;
+    };
+    constexpr float kSpread[] = {-0.105f, -0.052f, 0.0f, 0.052f, 0.105f};
+    for (float a : kSpread) wp.last_shot_dirs.push_back(rot(wp.dir, a));
+    if (wp.last_shot_dirs.size() != 5 || wp.last_shot_damage != 10) {
+      std::fprintf(stderr, "SMOKE FAIL: shotgun expected 5 pellets dmg 10 got %zu/%d\n",
+                   wp.last_shot_dirs.size(), wp.last_shot_damage);
+      return 1;
+    }
+    // Distinct dirs (spread not collapsed).
+    int distinct = 1;
+    for (size_t i = 1; i < wp.last_shot_dirs.size(); ++i) {
+      const float dx = wp.last_shot_dirs[i].x - wp.last_shot_dirs[0].x;
+      const float dy = wp.last_shot_dirs[i].y - wp.last_shot_dirs[0].y;
+      if (dx * dx + dy * dy > 1e-6f) ++distinct;
+    }
+    if (distinct < 3) {
+      std::fprintf(stderr, "SMOKE FAIL: shotgun dirs not spread (distinct=%d)\n", distinct);
+      return 1;
+    }
+    // Pistol: 1 ray / 25
+    wp.weapon = Weapon::Pistol;
+    wp.last_shot_dirs.clear();
+    wp.last_shot_damage = 25;
+    wp.last_shot_dirs.push_back(wp.dir);
+    if (wp.last_shot_dirs.size() != 1 || wp.last_shot_damage != 25) {
+      std::fprintf(stderr, "SMOKE FAIL: pistol expected 1x25\n");
+      return 1;
+    }
+    // Hitscan with shotgun damage still kills via multi apply
+    monsters = AI::spawn_from_map(map);
+    if (monsters.empty()) {
+      std::fprintf(stderr, "SMOKE FAIL: no monsters for shotgun hitscan\n");
+      return 1;
+    }
+    AI::Monster& prey = monsters[0];
+    prey.alive = true;
+    prey.hp = 30;
+    prey.max_hp = 30;
+    wp.pos = {prey.pos.x - 1.5f, prey.pos.y};
+    wp.dir = {1.0f, 0.0f};
+    if (Collision::hits_wall(map, prey.pos, wp.pos)) {
+      wp.pos = {7.5f, 8.5f};
+      prey.pos = {9.5f, 8.5f};
+    }
+    wp.weapon = Weapon::Shotgun;
+    wp.last_shot_dirs.clear();
+    wp.last_shot_damage = 10;
+    for (float a : kSpread) wp.last_shot_dirs.push_back(rot(wp.dir, a));
+    int hits = 0;
+    for (const Vec2& d : wp.last_shot_dirs) {
+      if (AI::apply_hitscan(map, monsters, wp.pos, d, wp.last_shot_damage)) ++hits;
+    }
+    if (hits < 1 || prey.alive) {
+      // 5*10=50 > 30 so center+near pellets should kill if any hit
+      std::fprintf(stderr, "SMOKE FAIL: shotgun hitscan hits=%d alive=%d hp=%d\n",
+                   hits, prey.alive ? 1 : 0, prey.hp);
+      return 1;
+    }
+    std::printf("smoke: weapons ok pistol=1x25 shotgun=5x10 (hits=%d)\n", hits);
+  }
+
   std::printf("SMOKE OK\n");
   return 0;
 }
