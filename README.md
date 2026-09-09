@@ -67,14 +67,14 @@ sleep 1; kill %1 2>/dev/null || true
 | ← / → | Turn |
 | Mouse | Look (yaw) |
 | LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
-| E / F | Use — open facing/adjacent `DoorClosed` within ~1 unit → `DoorOpen` (walkable) |
+| E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
 
 ### Slice 3 gameplay
 
-- **Doors:** `Map::try_set_tile(tx, ty, Tile)` is the minimal runtime mutator (does not rewrite the map file). `DoorOpen` is not solid.
+- **Doors:** `Map::set_tile(tx, ty, Tile)` (false if OOB) and `Map::try_open_door(tx, ty)` (`DoorClosed`→`DoorOpen` only). Use (E/F) raycasts ~1 unit ahead then `try_open_door`. Does not rewrite the map file. `DoorOpen` is not solid.
 - **Pickups:** Item spawns (`I x y type_id`) become a runtime list. Distance < ~0.5 collects and removes the entry. `type_id 10` → +25 health; `type_id 11` → +10 armor (+ ammo stub). Player health starts at **100**.
 - **HUD:** simple health (green/red) + armor bars drawn on the raycast framebuffer.
 
@@ -88,7 +88,7 @@ engine/
   collision/         — move, hits_wall, raycast
   timing/            — fixed timestep 1/60
   input/             — keyboard + mouse delta
-  map/               — tile map loader + try_set_tile mutator
+  map/               — tile map loader + set_tile / try_open_door
 game/                — player pose, movement, hitscan, use/doors, vitals
 ai/                  — AI stubs
 levels/demo.map      — 16×16 demo level
