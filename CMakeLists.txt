@@ -30,10 +30,13 @@ else()
   target_link_libraries(doom-grok PRIVATE ${SDL2_LIBRARIES})
 endif()
 
-# Copy demo map next to the binary for convenience
+# Copy campaign maps next to the binary for convenience
 add_custom_command(TARGET doom-grok POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:doom-grok>/levels
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${CMAKE_SOURCE_DIR}/levels/demo.map
           $<TARGET_FILE_DIR:doom-grok>/levels/demo.map
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_SOURCE_DIR}/levels/e1m2.map
+          $<TARGET_FILE_DIR:doom-grok>/levels/e1m2.map
 )
