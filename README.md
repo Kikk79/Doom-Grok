@@ -45,7 +45,7 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win):
+Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win; textures are renderer-only):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -110,12 +110,21 @@ Layout note: `ai/` is no longer stubs — `ai/ai.hpp` + `ai/ai.cpp`.
 - **Smoke:** kill-all → win flag; reload clears win.
 - Engine / Player / AI public APIs unchanged — app-loop only.
 
+## Slice 7 — wall textures
+
+- **Textures:** tiny procedural 64×64 atlas (brick, tech panel, door) — no external image assets.
+- **Sampling:** raycaster uses wall hit `side` + fractional wall X (`map` cell / hit point) and draws textured vertical strips instead of flat colors.
+- **Classic look:** EW (`side==1`) faces are darkened vs NS faces.
+- **Doors:** `DoorClosed` uses a distinct wood/brass door texture (brighter tint). `DoorOpen` stays non-solid (see-through opening) so it remains visually distinct.
+- **API:** `Collision::RayHit` gains additive `side` (0=NS/x-step, 1=EW/y-step). `Renderer::raycast_view` signature unchanged; public game/ai APIs unchanged.
+- **Smoke:** `--smoke` still passes (logic path; no framebuffer asserts).
+
 ## Layout
 
 ```
 app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, game over / YOU WIN
 engine/
-  renderer/          — raycast (internal; not public game/ai API)
+  renderer/          — textured raycast (internal; not public game/ai API)
   camera/            — Camera + Vec2
   collision/         — move, hits_wall, raycast
   timing/            — fixed timestep 1/60
