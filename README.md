@@ -45,6 +45,12 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
 
+Headless smoke (no display):
+```bash
+SDL_VIDEODRIVER=dummy ./build/doom-grok &
+sleep 1; kill %1 2>/dev/null || true
+```
+
 ## Controls
 
 | Key | Action |
@@ -55,7 +61,10 @@ Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GRO
 | D | Strafe right |
 | ← / → | Turn |
 | Mouse | Look (yaw) |
+| LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
 | Esc | Quit |
+
+Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
 
 ## Layout
 
@@ -66,9 +75,9 @@ engine/
   camera/            — Camera + Vec2
   collision/         — move, hits_wall, raycast
   timing/            — fixed timestep 1/60
-  input/             — keyboard + mouse
+  input/             — keyboard + mouse delta
   map/               — tile map loader
-game/                — player stub
+game/                — player pose, movement, hitscan weapon
 ai/                  — AI stubs
 levels/demo.map      — 16×16 demo level
 ```
