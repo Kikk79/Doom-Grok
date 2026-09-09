@@ -1,4 +1,5 @@
 #include "player.hpp"
+#include "engine/audio/audio.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -94,6 +95,7 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
     last_hit_ty = -1;
     std::printf("hitscan miss\n");
   }
+  Audio::play(Audio::Sfx::Fire);
   return true;
 }
 
@@ -117,6 +119,7 @@ bool Player::try_use(Map& map, const Input& input) {
 
   if (!map.try_open_door(tx, ty)) return false;
   std::printf("door opened at (%d,%d)\n", tx, ty);
+  Audio::play(Audio::Sfx::Door);
   return true;
 }
 
@@ -144,6 +147,7 @@ bool Player::take_damage(int amount) {
 
   std::printf("player hurt -%d (armor left=%d) -> health=%d%s\n",
               amount, armor, health, alive() ? "" : " DEAD");
+  Audio::play(Audio::Sfx::Hurt);
   return true;
 }
 
