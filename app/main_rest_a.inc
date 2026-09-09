@@ -45,6 +45,7 @@ void collect_pickups(Player& player, std::vector<ActivePickup>& pickups) {
     const float dy = player.pos.y - pickups[i].pos.y;
     if (dx * dx + dy * dy < r2) {
       apply_pickup_effect(player, pickups[i].type_id);
+      Audio::play(Audio::Sfx::Pickup);
       pickups.erase(pickups.begin() + static_cast<std::ptrdiff_t>(i));
     } else {
       ++i;
