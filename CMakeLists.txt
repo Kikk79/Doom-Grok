@@ -10,6 +10,7 @@ find_package(SDL2 REQUIRED)
 add_executable(doom-grok
   app/main.cpp
   game/player.cpp
+  ai/ai.cpp
   engine/camera/camera.cpp
   engine/collision/collision.cpp
   engine/input/input.cpp
