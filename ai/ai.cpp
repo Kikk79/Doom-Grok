@@ -34,28 +34,44 @@ void apply_type_stats(Monster& m) {
   m.hp = m.max_hp;
 }
 
-void tick_one(Monster& m, const Map& map, Vec2 player_pos, float dt) {
+void tick_one(Monster& m, const Map& map, Player& player, float dt) {
   if (!m.alive || m.hp <= 0) {
     m.alive = false;
     return;
   }
 
-  // Clear LOS → Chase (no solid between monster and player).
+  if (m.attack_cd > 0.0f) {
+    m.attack_cd -= dt;
+    if (m.attack_cd < 0.0f) m.attack_cd = 0.0f;
+  }
+
+  const Vec2 player_pos = player.pos;
   const bool los = !Collision::hits_wall(map, m.pos, player_pos);
+  Vec2 delta{player_pos.x - m.pos.x, player_pos.y - m.pos.y};
+  const float dist = length(delta);
+  const bool was_aggro = (m.state == State::Chase || m.state == State::Attack);
+
+  // Attack when within melee range and (clear LOS or already chasing/attacking).
+  if (dist <= kMeleeRange && (los || was_aggro)) {
+    m.state = State::Attack;
+    if (m.attack_cd <= 0.0f) {
+      const int dmg = melee_damage_for(m.type_id);
+      player.take_damage(dmg);  // no-op under i-frames / if dead
+      m.attack_cd = kMeleeCooldown;
+    }
+    return;  // stand and swing; no chase move while in range
+  }
+
+  // Out of melee range: Chase on LOS, else Idle.
   if (los) {
     m.state = State::Chase;
-  }
-  // Stay Idle (or remain Chase once acquired — Slice 4 keeps Chase while LOS holds;
-  // lose aggro when LOS breaks so Idle is default again).
-  if (!los) {
+  } else {
     m.state = State::Idle;
     return;
   }
 
-  if (m.state != State::Chase) return;
-
-  Vec2 delta{player_pos.x - m.pos.x, player_pos.y - m.pos.y};
-  const float dist = length(delta);
+  // Chase movement (stop just inside former Slice-4 kStop when somehow closer
+  // without entering Attack — normally Attack covers ≤ kMeleeRange).
   constexpr float kStop = 0.45f;
   if (dist <= kStop) return;
 
@@ -72,6 +88,7 @@ Monster make_monster(int type_id, Vec2 pos) {
   m.pos = pos;
   m.state = State::Idle;
   m.alive = true;
+  m.attack_cd = 0.0f;
   apply_type_stats(m);
   return m;
 }
@@ -86,8 +103,8 @@ std::vector<Monster> spawn_from_map(const Map& map) {
   return out;
 }
 
-void update(std::vector<Monster>& monsters, const Map& map, Vec2 player_pos, float dt) {
-  for (auto& m : monsters) tick_one(m, map, player_pos, dt);
+void update(std::vector<Monster>& monsters, const Map& map, Player& player, float dt) {
+  for (auto& m : monsters) tick_one(m, map, player, dt);
 }
 
 bool apply_hitscan(const Map& map, std::vector<Monster>& monsters, Vec2 from, Vec2 dir,
