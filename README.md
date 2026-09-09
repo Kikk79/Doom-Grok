@@ -45,7 +45,7 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups):
+Headless logic smoke (no display; doors + pickups + monsters/AI/hitscan):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -66,11 +66,11 @@ sleep 1; kill %1 2>/dev/null || true
 | D | Strafe right |
 | ← / → | Turn |
 | Mouse | Look (yaw) |
-| LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
+| LMB / Space / Ctrl | Fire hitscan (damages nearest monster along ray, else wall) |
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
 | Esc | Quit |
 
-Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
+Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame. Monster AI also uses **Player pose**, not Camera.
 
 ### Slice 3 gameplay
 
@@ -78,20 +78,28 @@ Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each f
 - **Pickups:** Item spawns (`I x y type_id`) become a runtime list. Distance < ~0.5 collects and removes the entry. `type_id 10` → +25 health; `type_id 11` → +10 armor (+ ammo stub). Player health starts at **100**.
 - **HUD:** simple health (green/red) + armor bars drawn on the raycast framebuffer.
 
+### Slice 4 — first monsters / AI
+
+- **Spawn:** `M x y type_id` entities from `Map::spawns()` → `AI::Monster` (`AI::spawn_from_map`). HP by `type_id` (1→40, 2→60, else 30).
+- **AI:** `Idle` → `Chase` when clear LOS to the player (`Collision::hits_wall` / raycast). Chase moves with `Collision::move` toward **Player** `pos`.
+- **Hitscan:** `Player::try_fire` damages the nearest living monster along the aim ray if closer than the wall hit; death sets `alive=false` (deactivated, no billboard).
+- **Visual:** living monsters drawn as colored billboards / filled columns (internal renderer; depth-tested against walls).
+- **Collision:** soft radius separation vs the player (monsters are not hard walls).
+
 ## Layout
 
 ```
-app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups
+app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, smoke
 engine/
-  renderer/          — raycast (internal; not public game/ai API)
+  renderer/          — raycast + billboards (internal; not public game/ai API)
   camera/            — Camera + Vec2
   collision/         — move, hits_wall, raycast
   timing/            — fixed timestep 1/60
   input/             — keyboard + mouse delta
   map/               — tile map loader + set_tile / try_open_door
 game/                — player pose, movement, hitscan, use/doors, vitals
-ai/                  — AI stubs
-levels/demo.map      — 16×16 demo level
+ai/                  — Monster spawn, Idle/Chase AI, hitscan damage, soft collide
+levels/demo.map      — 16×16 demo level (3 monsters, 2 items)
 ```
 
 ## Map format (`levels/demo.map`)

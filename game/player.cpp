@@ -70,7 +70,8 @@ void Player::update(const Map& map, const Input& input, float dt) {
   pos = Collision::move(map, pos, vel, radius);
 }
 
-bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
+bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked,
+                      std::vector<AI::Monster>* monsters) {
   const bool key_fire =
       input.key_pressed(SDL_SCANCODE_SPACE) ||
       input.key_pressed(SDL_SCANCODE_LCTRL) ||
@@ -79,7 +80,19 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
 
   constexpr float kMaxDist = 64.0f;
   const Collision::RayHit hit = Collision::raycast(map, pos, dir, kMaxDist);
-  muzzle_flash = 0.08f;  // brief screen flash
+  const float wall_dist = hit.hit ? hit.dist : kMaxDist;
+
+  muzzle_flash = 0.08f;
+  last_hit_monster = false;
+
+  if (monsters && AI::hitscan(*monsters, pos, dir, wall_dist, 20)) {
+    last_hit_monster = true;
+    last_hit_dist = -1.0f;
+    last_hit_tx = -1;
+    last_hit_ty = -1;
+    return true;
+  }
+
   if (hit.hit) {
     last_hit_dist = hit.dist;
     last_hit_tx = hit.tx;
