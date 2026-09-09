@@ -14,10 +14,14 @@ struct Player {
   float turn_speed = 2.5f;   // radians / second
   float mouse_sens = 0.003f;
 
-  // Slice 3 vitals
+  // Vitals
   int health = 100;
   int armor = 0;
   int ammo = 0;  // stub (type_id 11 may bump armor or ammo)
+
+  // Slice 5: brief invulnerability after a hit (seconds remaining).
+  float invuln_t = 0.0f;
+  static constexpr float kIFrameSec = 0.75f;
 
   // Hitscan feedback (seconds remaining / last wall hit distance)
   float muzzle_flash = 0.0f;
@@ -25,18 +29,12 @@ struct Player {
   int last_hit_tx = -1;
   int last_hit_ty = -1;
 
-  // Slice 5: damage / invulnerability
-  float invuln = 0.0f;         // seconds remaining (~0.5s after a hit)
-  float damage_flash = 0.0f;   // red flash timer
-  static constexpr float kInvulnTime = 0.5f;
-  static constexpr float kDamageFlashTime = 0.25f;
-
   void set_pose(Vec2 p, Vec2 d);
 
   // Mouse look once per rendered frame (not per fixed step).
   void apply_look(const Input& input, float mouse_dx);
 
-  // Fixed-step: turn keys + WASD → Collision::move.
+  // Fixed-step: turn keys + WASD → Collision::move. No-op if dead.
   void update(const Map& map, const Input& input, float dt);
 
   // Edge-triggered hitscan; mouse_clicked from SDL in app layer.
@@ -46,18 +44,19 @@ struct Player {
   // Slice 3: Use (E / F) — raycast/world_to_tile ahead (~1 unit) → Map::try_open_door.
   bool try_use(Map& map, const Input& input);
 
-  // Slice 5: apply damage (armor first, then HP). Honors invuln frames.
-  // Returns true if any HP/armor was reduced.
+  // Slice 5: Melee/projectile damage from AI. Respects i-frames. Returns true if HP changed.
+  // Armor absorbs ~half of the hit (up to current armor); remainder goes to health.
   bool take_damage(int amount);
 
-  bool is_dead() const { return health <= 0; }
+  bool alive() const { return health > 0; }
+  bool invulnerable() const { return invuln_t > 0.0f; }
 
-  // Reset vitals for level restart (pose set separately).
-  void reset_vitals();
+  // Restart helper: pose + vitals + FX. Does not touch map/pickups/monsters (app resets those).
+  void reset_vitals(Vec2 spawn_pos, Vec2 spawn_dir);
 
   // Camera::set_pose follows player pose.
   void sync_camera(Camera& cam) const;
 
-  // Decay flash / invuln timers (call once per frame with real frame dt).
+  // Decay flash + i-frame timers (call once per frame with real frame dt).
   void tick_fx(float frame_dt);
 };
