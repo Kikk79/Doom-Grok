@@ -45,7 +45,7 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups + monsters/AI):
+Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -68,6 +68,7 @@ sleep 1; kill %1 2>/dev/null || true
 | Mouse | Look (yaw) |
 | LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
+| R | Restart level (after game over) |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
@@ -90,10 +91,20 @@ Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each f
 
 Layout note: `ai/` is no longer stubs — `ai/ai.hpp` + `ai/ai.cpp`.
 
+## Slice 5 — monster melee + player damage
+
+- **Attack:** dist ≤ `AI::kMeleeRange` (0.55) and (LOS or Chase/Attack) → `State::Attack`.
+- **Melee:** AI-owned cooldown `AI::kMeleeCooldown` (0.9s). Calls `player.take_damage(type_id==2 ? 15 : 10)`.
+- **Player:** armor absorbs ~half each hit; i-frames `Player::kIFrameSec` (0.75s) via `invuln_t`.
+- **API:** `take_damage`, `alive()`, `invulnerable()`, `reset_vitals(spawn_pos, spawn_dir)`.
+- **Death / restart:** HP ≤ 0 → game over overlay; **R** reloads map + resets player/monsters/pickups.
+- **Smoke:** melee Attack, i-frames, death, `reload_level`.
+- Engine APIs unchanged — `ai/` + `game/` only.
+
 ## Layout
 
 ```
-app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups
+app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, game over
 engine/
   renderer/          — raycast (internal; not public game/ai API)
   camera/            — Camera + Vec2
@@ -101,8 +112,8 @@ engine/
   timing/            — fixed timestep 1/60
   input/             — keyboard + mouse delta
   map/               — tile map loader + set_tile / try_open_door
-game/                — player pose, movement, hitscan, use/doors, vitals
-ai/                  — Monster spawn, Idle/Chase AI, hitscan, billboards
+game/                — player pose, movement, hitscan, use/doors, vitals, damage
+ai/                  — Monster spawn, Idle/Chase/Attack AI, hitscan, melee, billboards
 levels/demo.map      — 16×16 demo level
 ```
 
