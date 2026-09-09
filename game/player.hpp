@@ -49,6 +49,7 @@ struct Player {
   bool take_damage(int amount);
 
   bool alive() const { return health > 0; }
+  bool is_dead() const { return !alive(); }
   bool invulnerable() const { return invuln_t > 0.0f; }
 
   // Restart helper: pose + vitals + FX. Does not touch map/pickups/monsters (app resets those).
