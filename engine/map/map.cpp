@@ -123,8 +123,14 @@ bool Map::world_to_tile(Vec2 p, int& tx, int& ty) const {
 
 const std::vector<EntitySpawn>& Map::spawns() const { return spawns_; }
 
-bool Map::try_set_tile(int tx, int ty, Tile t) {
+bool Map::set_tile(int tx, int ty, Tile t) {
   if (tx < 0 || ty < 0 || tx >= width_ || ty >= height_) return false;
   tiles_[static_cast<size_t>(ty * width_ + tx)] = t;
   return true;
+}
+
+bool Map::try_open_door(int tx, int ty) {
+  if (tx < 0 || ty < 0 || tx >= width_ || ty >= height_) return false;
+  if (tile_at(tx, ty) != Tile::DoorClosed) return false;
+  return set_tile(tx, ty, Tile::DoorOpen);
 }

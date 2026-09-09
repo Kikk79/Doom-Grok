@@ -100,35 +100,21 @@ bool Player::try_use(Map& map, const Input& input) {
     return false;
   }
 
-  auto try_open_at = [&](int tx, int ty) -> bool {
-    if (map.tile_at(tx, ty) != Tile::DoorClosed) return false;
-    if (!map.try_set_tile(tx, ty, Tile::DoorOpen)) return false;
-    std::printf("door opened at (%d,%d)\n", tx, ty);
-    return true;
-  };
-
-  // Prefer tiles along facing within ~1 unit
+  // Use: look ~1 unit ahead (ray / world_to_tile), then try_open_door.
   constexpr float kReach = 1.0f;
-  for (float d = 0.35f; d <= kReach + 1e-3f; d += 0.35f) {
-    const int tx = static_cast<int>(std::floor(pos.x + dir.x * d));
-    const int ty = static_cast<int>(std::floor(pos.y + dir.y * d));
-    if (try_open_at(tx, ty)) return true;
+  const Collision::RayHit hit = Collision::raycast(map, pos, dir, kReach);
+  int tx = -1, ty = -1;
+  if (hit.hit) {
+    tx = hit.tx;
+    ty = hit.ty;
+  } else {
+    const Vec2 ahead{pos.x + dir.x * kReach, pos.y + dir.y * kReach};
+    if (!map.world_to_tile(ahead, tx, ty)) return false;
   }
 
-  // Adjacent tiles with center within ~1 unit of player
-  const int ptx = static_cast<int>(std::floor(pos.x));
-  const int pty = static_cast<int>(std::floor(pos.y));
-  for (int ty = pty - 1; ty <= pty + 1; ++ty) {
-    for (int tx = ptx - 1; tx <= ptx + 1; ++tx) {
-      const float cx = static_cast<float>(tx) + 0.5f;
-      const float cy = static_cast<float>(ty) + 0.5f;
-      const float dx = cx - pos.x;
-      const float dy = cy - pos.y;
-      if (dx * dx + dy * dy > kReach * kReach) continue;
-      if (try_open_at(tx, ty)) return true;
-    }
-  }
-  return false;
+  if (!map.try_open_door(tx, ty)) return false;
+  std::printf("door opened at (%d,%d)\n", tx, ty);
+  return true;
 }
 
 void Player::sync_camera(Camera& cam) const {
