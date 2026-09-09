@@ -1,5 +1,6 @@
 #include "player.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -117,6 +118,41 @@ bool Player::try_use(Map& map, const Input& input) {
   return true;
 }
 
+bool Player::take_damage(int amount) {
+  if (amount <= 0) return false;
+  if (invuln > 0.0f) return false;
+  if (health <= 0) return false;
+
+  int remaining = amount;
+  if (armor > 0) {
+    const int absorbed = std::min(armor, remaining);
+    armor -= absorbed;
+    remaining -= absorbed;
+  }
+  if (remaining > 0) {
+    health -= remaining;
+    if (health < 0) health = 0;
+  }
+
+  invuln = kInvulnTime;
+  damage_flash = kDamageFlashTime;
+  std::printf("player damaged %d -> health=%d armor=%d invuln=%.2f\n",
+              amount, health, armor, invuln);
+  return true;
+}
+
+void Player::reset_vitals() {
+  health = 100;
+  armor = 0;
+  ammo = 0;
+  invuln = 0.0f;
+  damage_flash = 0.0f;
+  muzzle_flash = 0.0f;
+  last_hit_dist = -1.0f;
+  last_hit_tx = -1;
+  last_hit_ty = -1;
+}
+
 void Player::sync_camera(Camera& cam) const {
   cam.set_pose(pos, dir);
 }
@@ -125,5 +161,13 @@ void Player::tick_fx(float frame_dt) {
   if (muzzle_flash > 0.0f) {
     muzzle_flash -= frame_dt;
     if (muzzle_flash < 0.0f) muzzle_flash = 0.0f;
+  }
+  if (invuln > 0.0f) {
+    invuln -= frame_dt;
+    if (invuln < 0.0f) invuln = 0.0f;
+  }
+  if (damage_flash > 0.0f) {
+    damage_flash -= frame_dt;
+    if (damage_flash < 0.0f) damage_flash = 0.0f;
   }
 }
