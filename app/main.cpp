@@ -155,6 +155,65 @@ void draw_game_over(Renderer::FrameBuffer& fb) {
   }
 }
 
+// Slice 6 — distinct from game over: green/gold banner + mild brighten (not darken).
+void draw_you_win(Renderer::FrameBuffer& fb) {
+  if (fb.width <= 0 || fb.height <= 0) return;
+  const int w = fb.width;
+  const int h = fb.height;
+  for (int i = 0; i < w * h; ++i) {
+    uint32_t pix = fb.pixels[static_cast<size_t>(i)];
+    uint32_t r = std::min(255u, ((pix >> 16) & 0xFFu) + 20u);
+    uint32_t g = std::min(255u, ((pix >> 8) & 0xFFu) + 40u);
+    uint32_t b = std::min(255u, (pix & 0xFFu) + 10u);
+    fb.pixels[static_cast<size_t>(i)] = 0xFF000000u | (r << 16) | (g << 8) | b;
+  }
+  const int y0 = h / 2 - 10;
+  const int y1 = h / 2 + 10;
+  for (int y = y0; y < y1; ++y) {
+    if (y < 0 || y >= h) continue;
+    for (int x = w / 5; x < (4 * w) / 5; ++x) {
+      fb.pixels[static_cast<size_t>(y * w + x)] = 0xFF18C040u;  // green
+    }
+  }
+  // Gold accent stripe
+  const int y_mid = h / 2;
+  if (y_mid >= 0 && y_mid < h) {
+    for (int x = w / 5; x < (4 * w) / 5; ++x) {
+      fb.pixels[static_cast<size_t>(y_mid * w + x)] = 0xFFE0C020u;
+    }
+  }
+}
+
+bool all_monsters_dead(const std::vector<AI::Monster>& monsters) {
+  if (monsters.empty()) return false;
+  for (const auto& m : monsters) {
+    if (m.alive) return false;
+  }
+  return true;
+}
+
+// EntitySpawn Kind::Door is map 'E' — exit marker (optional secondary win trigger).
+bool near_exit(const Player& player, const Map& map) {
+  const float r2 = kPickupRadius * kPickupRadius;
+  for (const auto& s : map.spawns()) {
+    if (s.kind != EntitySpawn::Kind::Door) continue;
+    const float dx = player.pos.x - s.pos.x;
+    const float dy = player.pos.y - s.pos.y;
+    if (dx * dx + dy * dy < r2) return true;
+  }
+  return false;
+}
+
+bool check_win(const std::vector<AI::Monster>& monsters, const Player& player,
+               const Map& map) {
+  if (!player.alive()) return false;
+  if (!all_monsters_dead(monsters)) return false;
+  // All-dead is enough to win. Exit (E / Kind::Door) after clear is an alternate
+  // trigger that yields the same flag (useful if win is deferred; kept for smoke).
+  if (near_exit(player, map)) return true;
+  return true;
+}
+
 void apply_damage_flash(Renderer::FrameBuffer& fb, float invuln_t) {
   if (invuln_t <= 0.0f || fb.width <= 0 || fb.height <= 0) return;
   const float strength = std::clamp(invuln_t / Player::kIFrameSec, 0.0f, 1.0f) * 0.55f;
@@ -406,6 +465,54 @@ int run_smoke(const char* map_path) {
   }
   std::printf("smoke: death+restart ok\n");
 
+  // --- Slice 6: kill all → win flag ---
+  monsters = AI::spawn_from_map(map);
+  if (monsters.empty()) {
+    std::fprintf(stderr, "SMOKE FAIL: no monsters for win test\n");
+    return 1;
+  }
+  if (all_monsters_dead(monsters) || check_win(monsters, player, map)) {
+    std::fprintf(stderr, "SMOKE FAIL: win should be false while monsters alive\n");
+    return 1;
+  }
+  for (auto& m : monsters) {
+    m.alive = false;
+    m.hp = 0;
+  }
+  if (!all_monsters_dead(monsters)) {
+    std::fprintf(stderr, "SMOKE FAIL: all_monsters_dead after kill-all\n");
+    return 1;
+  }
+  const bool win_flag = check_win(monsters, player, map);
+  if (!win_flag) {
+    std::fprintf(stderr, "SMOKE FAIL: expected win flag after kill-all\n");
+    return 1;
+  }
+  // Optional exit: standing on E after clear also wins (same flag).
+  bool have_exit = false;
+  for (const auto& s : map.spawns()) {
+    if (s.kind == EntitySpawn::Kind::Door) {
+      player.pos = s.pos;
+      have_exit = true;
+      break;
+    }
+  }
+  if (have_exit && !check_win(monsters, player, map)) {
+    std::fprintf(stderr, "SMOKE FAIL: exit-after-clear should win\n");
+    return 1;
+  }
+  // R / reload clears win path (monsters respawn → not won).
+  if (!reload_level(map_path, map, player, cam, monsters, pickups)) {
+    std::fprintf(stderr, "SMOKE FAIL: reload after win\n");
+    return 1;
+  }
+  if (all_monsters_dead(monsters) || check_win(monsters, player, map)) {
+    std::fprintf(stderr, "SMOKE FAIL: win should clear after restart\n");
+    return 1;
+  }
+  std::printf("smoke: win flag ok (kill-all + restart)%s\n",
+              have_exit ? " + exit" : "");
+
   std::printf("SMOKE OK\n");
   return 0;
 }
@@ -462,6 +569,8 @@ int main(int argc, char** argv) {
   SDL_SetRelativeMouseMode(SDL_TRUE);
   bool running = true;
   bool game_over_logged = false;
+  bool won = false;
+  bool win_logged = false;
   Uint64 prev = SDL_GetPerformanceCounter();
   const Uint64 freq = SDL_GetPerformanceFrequency();
   while (running) {
@@ -479,6 +588,7 @@ int main(int argc, char** argv) {
     prev = now;
 
     if (player.is_dead()) {
+      won = false;
       if (!game_over_logged) {
         std::printf("GAME OVER — press R to restart\n");
         game_over_logged = true;
@@ -486,6 +596,8 @@ int main(int argc, char** argv) {
       if (input.key_pressed(SDL_SCANCODE_R)) {
         if (reload_level(map_path.c_str(), map, player, camera, monsters, pickups)) {
           game_over_logged = false;
+          win_logged = false;
+          won = false;
           clock.reset();
         }
       }
@@ -494,6 +606,28 @@ int main(int argc, char** argv) {
       AI::draw(fb, camera, map, monsters);
       draw_hud(fb, player);
       draw_game_over(fb);
+      Renderer::present(renderer, texture, fb);
+      continue;
+    }
+
+    if (won) {
+      if (!win_logged) {
+        std::printf("YOU WIN — press R to restart\n");
+        win_logged = true;
+      }
+      if (input.key_pressed(SDL_SCANCODE_R)) {
+        if (reload_level(map_path.c_str(), map, player, camera, monsters, pickups)) {
+          won = false;
+          win_logged = false;
+          game_over_logged = false;
+          clock.reset();
+        }
+      }
+      player.tick_fx(static_cast<float>(frame_dt));
+      Renderer::raycast_view(map, camera, fb);
+      AI::draw(fb, camera, map, monsters);
+      draw_hud(fb, player);
+      draw_you_win(fb);
       Renderer::present(renderer, texture, fb);
       continue;
     }
@@ -512,6 +646,10 @@ int main(int argc, char** argv) {
         std::printf("hitscan monster hit\n");
       }
     }
+    // Slice 6: all monsters dead → win (exit after clear also satisfies check_win).
+    if (check_win(monsters, player, map)) {
+      won = true;
+    }
     player.sync_camera(camera);
     player.tick_fx(static_cast<float>(frame_dt));
     Renderer::raycast_view(map, camera, fb);
@@ -519,6 +657,7 @@ int main(int argc, char** argv) {
     if (player.muzzle_flash > 0.0f) apply_muzzle_flash(fb, player.muzzle_flash / 0.08f);
     if (player.invulnerable()) apply_damage_flash(fb, player.invuln_t);
     draw_hud(fb, player);
+    if (won) draw_you_win(fb);
     Renderer::present(renderer, texture, fb);
   }
   SDL_SetRelativeMouseMode(SDL_FALSE);

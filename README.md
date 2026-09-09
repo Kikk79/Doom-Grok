@@ -45,7 +45,7 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart):
+Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -68,7 +68,7 @@ sleep 1; kill %1 2>/dev/null || true
 | Mouse | Look (yaw) |
 | LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
-| R | Restart level (after game over) |
+| R | Restart level (after game over or YOU WIN) |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
@@ -101,10 +101,19 @@ Layout note: `ai/` is no longer stubs — `ai/ai.hpp` + `ai/ai.cpp`.
 - **Smoke:** melee Attack, i-frames, death, `reload_level`.
 - Engine APIs unchanged — `ai/` + `game/` only.
 
+## Slice 6 — win condition
+
+- **Clear:** when every spawned monster has `!alive`, the level is won.
+- **YOU WIN:** green/gold overlay (distinct from the red GAME OVER banner).
+- **Exit (optional):** map entity `E` → `EntitySpawn::Kind::Door` — walking into it after clear also wins; all-dead alone is enough.
+- **Restart:** **R** from win or death reloads the map, respawns monsters/pickups, and `reset_vitals`.
+- **Smoke:** kill-all → win flag; reload clears win.
+- Engine / Player / AI public APIs unchanged — app-loop only.
+
 ## Layout
 
 ```
-app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, game over
+app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, game over / YOU WIN
 engine/
   renderer/          — raycast (internal; not public game/ai API)
   camera/            — Camera + Vec2
