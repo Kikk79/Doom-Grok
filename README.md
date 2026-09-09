@@ -6,7 +6,7 @@ C++17 / SDL2 raycasting Doom-like skeleton. Fixed timestep (1/60), 1 tile = 1.0 
 
 - CMake ≥ 3.16
 - C++17 compiler (GCC/Clang/MSVC)
-- SDL2 development libraries
+- SDL2 development libraries (video + **audio**; no SDL2_mixer / wav assets required)
 
 ### Install SDL2
 
@@ -45,7 +45,7 @@ cmake --build build
 
 Run from the repo root so `levels/demo.map` / `levels/e1m2.map` resolve. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win + two-map campaign load; textures are renderer-only):
+Headless logic smoke (no display / **no audio hardware**; doors + pickups + monsters/AI + melee/damage/restart + win + two-map campaign load; textures are renderer-only; SFX skipped):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -133,11 +133,20 @@ Level list: `{"levels/demo.map", "levels/e1m2.map"}` (app wiring; Map::load alre
 - **Smoke:** loads both maps + progression (demo→e1m2, no wrap after e1m2).
 - **APIs:** Engine / Player / AI public APIs unchanged — app-loop + map assets only.
 
+## Slice 9 — simple SFX
+
+- **Audio:** `engine/audio/` — SDL2 audio device (`SDL_QueueAudio`) with **procedural** short beeps/noises (no wav / mixer assets). Optional SDL2_mixer not used.
+- **Triggers:** fire/hitscan, door open (`try_use`), player hurt (HP drop), pickup collect, monster death (hitscan kill), win jingle (first win transition).
+- **Mute-safe:** if `SDL_INIT_AUDIO` / `OpenAudioDevice` fails, the game still runs; `Audio::play` is a no-op.
+- **Smoke:** `--smoke` does **not** init audio (no device required).
+- **APIs:** public game / AI / other engine APIs unchanged — small `Audio` module only.
+
 ## Layout
 
 ```
 app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, win / campaign progression
 engine/
+  audio/             — procedural SFX (SDL2 device; mute-safe)
   renderer/          — textured raycast (internal; not public game/ai API)
   camera/            — Camera + Vec2
   collision/         — move, hits_wall, raycast
