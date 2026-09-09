@@ -43,9 +43,9 @@ cmake --build build
 ./build/doom-grok
 ```
 
-Run from the repo root so `levels/demo.map` resolves. You can also set `DOOM_GROK_ROOT` to the project directory.
+Run from the repo root so `levels/demo.map` / `levels/e1m2.map` resolve. You can also set `DOOM_GROK_ROOT` to the project directory.
 
-Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win; textures are renderer-only):
+Headless logic smoke (no display; doors + pickups + monsters/AI + melee/damage/restart + win + two-map campaign load; textures are renderer-only):
 ```bash
 ./build/doom-grok --smoke
 ```
@@ -68,7 +68,8 @@ sleep 1; kill %1 2>/dev/null || true
 | Mouse | Look (yaw) |
 | LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
-| R | Restart level (after game over or YOU WIN) |
+| R | Restart current level (after game over / YOU WIN / campaign complete) |
+| N | Next map after YOU WIN (demo → e1m2); after e1m2 loops campaign |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
@@ -119,10 +120,19 @@ Layout note: `ai/` is no longer stubs — `ai/ai.hpp` + `ai/ai.cpp`.
 - **API:** `Collision::RayHit` gains additive `side` (0=NS/x-step, 1=EW/y-step). `Renderer::raycast_view` signature unchanged; public game/ai APIs unchanged.
 - **Smoke:** `--smoke` still passes (logic path; no framebuffer asserts).
 
+## Slice 8 — second level + progression
+
+- **e1m2:** `levels/e1m2.map` — 20×18 layout (different from demo), 4 monsters, doors, items, player start, optional `E` exit. Same map format.
+- **YOU WIN:** **N** loads the next campaign map (`demo.map` → `e1m2.map`). **R** still fully restarts the *current* level.
+- **Campaign complete:** clearing `e1m2` shows a campaign-complete banner; **N** or **R** loops back to `demo.map`.
+- **Tracking:** app keeps `current_level` path; `reload_level` always uses it.
+- **Smoke:** `--smoke` loads both maps and checks next-path helpers + e1m2 content.
+- **APIs:** Engine / Player / AI public APIs unchanged — app-loop + map assets only.
+
 ## Layout
 
 ```
-app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, game over / YOU WIN
+app/                 — main.cpp, SDL bootstrap, game loop, HUD, pickups, win / campaign progression
 engine/
   renderer/          — textured raycast (internal; not public game/ai API)
   camera/            — Camera + Vec2
@@ -132,10 +142,11 @@ engine/
   map/               — tile map loader + set_tile / try_open_door
 game/                — player pose, movement, hitscan, use/doors, vitals, damage
 ai/                  — Monster spawn, Idle/Chase/Attack AI, hitscan, melee, billboards
-levels/demo.map      — 16×16 demo level
+levels/demo.map      — 16×16 campaign map 1
+levels/e1m2.map      — 20×18 campaign map 2
 ```
 
-## Map format (`levels/demo.map`)
+## Map format (`levels/*.map`)
 
 ```
 # doom-map v1
