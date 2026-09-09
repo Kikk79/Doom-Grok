@@ -69,7 +69,7 @@ sleep 1; kill %1 2>/dev/null || true
 | LMB / Space / Ctrl | Fire hitscan (raycast; wall hit logs dist + brief flash) |
 | E / F | Use — raycast ~1 unit ahead → `try_open_door` (`DoorClosed`→`DoorOpen`) |
 | R | Restart current level (after game over / YOU WIN / campaign complete) |
-| N | Next map after YOU WIN (demo → e1m2); after e1m2 loops campaign |
+| N | Next map after YOU WIN (demo → e1m2); no-op on e1m2 COMPLETE |
 | Esc | Quit |
 
 Pose is owned by `game/Player`; the camera follows via `Camera::set_pose` each frame.
@@ -122,11 +122,15 @@ Layout note: `ai/` is no longer stubs — `ai/ai.hpp` + `ai/ai.cpp`.
 
 ## Slice 8 — second level + progression
 
-- **e1m2:** `levels/e1m2.map` — 20×18 layout (different from demo), 4 monsters, doors, items, player start, optional `E` exit. Same map format.
-- **YOU WIN:** **N** loads the next campaign map (`demo.map` → `e1m2.map`). **R** still fully restarts the *current* level.
-- **Campaign complete:** clearing `e1m2` shows a campaign-complete banner; **N** or **R** loops back to `demo.map`.
-- **Tracking:** app keeps `current_level` path; `reload_level` always uses it.
-- **Smoke:** `--smoke` loads both maps and checks next-path helpers + e1m2 content.
+Level list: `{"levels/demo.map", "levels/e1m2.map"}` (app wiring; Map::load already path-based).
+
+- **e1m2:** `levels/e1m2.map` — 16×16, two chambers linked by `DD` doors; 5 monsters (3×type1, 2×type2); 3 items (2×health, 1×armor); `P` NW start; `E` SE exit after clear. Harder than demo.
+- **R:** restart current level (reload same path; reset vitals/pose from `P`, respawn monsters/items).
+- **N (after win on demo):** load `e1m2.map` fresh.
+- **After win on e1m2:** campaign COMPLETE overlay — **no wrap**; **N** is a no-op; **R** restarts `e1m2`.
+- **Win overlay hint:** N next · R restart (on final map: R restart only).
+- **Tracking:** app keeps `current_level` path; `reload_level` uses it.
+- **Smoke:** loads both maps + progression (demo→e1m2, no wrap after e1m2).
 - **APIs:** Engine / Player / AI public APIs unchanged — app-loop + map assets only.
 
 ## Layout
@@ -143,7 +147,7 @@ engine/
 game/                — player pose, movement, hitscan, use/doors, vitals, damage
 ai/                  — Monster spawn, Idle/Chase/Attack AI, hitscan, melee, billboards
 levels/demo.map      — 16×16 campaign map 1
-levels/e1m2.map      — 20×18 campaign map 2
+levels/e1m2.map      — 16×16 campaign map 2 (two chambers)
 ```
 
 ## Map format (`levels/*.map`)
