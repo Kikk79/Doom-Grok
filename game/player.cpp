@@ -82,6 +82,15 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
       input.key_pressed(SDL_SCANCODE_RCTRL);
   if (!mouse_clicked && !key_fire) return false;
 
+  // Slice 11: consume ammo (1 bullet / 1 shell). Empty magazine → no shot.
+  if (weapon == Weapon::Shotgun) {
+    if (ammo_shell <= 0) return false;
+    --ammo_shell;
+  } else {
+    if (ammo_bullet <= 0) return false;
+    --ammo_bullet;
+  }
+
   last_shot_dirs.clear();
   constexpr float kMaxDist = 64.0f;
 
@@ -92,7 +101,7 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
   };
 
   if (weapon == Weapon::Shotgun) {
-    // 5 pellets, ± spread ~±6° (±0.105 rad)
+    // 5 pellets, fixed spread ~±6° (±0.105 rad)
     last_shot_damage = 10;
     constexpr float kSpread[] = {-0.105f, -0.052f, 0.0f, 0.052f, 0.105f};
     for (float a : kSpread) {
@@ -113,8 +122,9 @@ bool Player::try_fire(const Map& map, const Input& input, bool mouse_clicked) {
     last_hit_dist = hit.dist;
     last_hit_tx = hit.tx;
     last_hit_ty = hit.ty;
-    std::printf("hitscan wall hit dist=%.2f tile=(%d,%d) weapon=%d pellets=%zu\n",
-                hit.dist, hit.tx, hit.ty, static_cast<int>(weapon), last_shot_dirs.size());
+    std::printf("hitscan wall hit dist=%.2f tile=(%d,%d) weapon=%d pellets=%zu ammo=%d\n",
+                hit.dist, hit.tx, hit.ty, static_cast<int>(weapon), last_shot_dirs.size(),
+                active_ammo());
   } else {
     last_hit_dist = -1.0f;
     last_hit_tx = -1;
@@ -182,7 +192,8 @@ void Player::reset_vitals(Vec2 spawn_pos, Vec2 spawn_dir) {
   set_pose(spawn_pos, spawn_dir);
   health = 100;
   armor = 0;
-  ammo = 0;
+  ammo_bullet = 50;
+  ammo_shell = 8;
   weapon = Weapon::Pistol;
   last_shot_dirs.clear();
   last_shot_damage = 25;
