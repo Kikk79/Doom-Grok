@@ -81,6 +81,22 @@ void draw_hud(Renderer::FrameBuffer& fb, const Player& player) {
   fill_rect(x0, y_ar, kBarW, 4, 0xFF202020u);
   const int ar_fill = std::clamp(player.armor, 0, 100) * (kBarW - 2) / 100;
   fill_rect(x0 + 1, y_ar + 1, ar_fill, 2, 0xFF4080C0u);
+
+  // Slice 10 — weapon slots (1 pistol / 2 shotgun); active highlighted.
+  const int slot_w = 14;
+  const int slot_h = 10;
+  const int sx1 = w - 4 - slot_w * 2 - 4;
+  const int sx2 = w - 4 - slot_w;
+  const int sy = h - 14;
+  const bool shotgun = player.weapon == Weapon::Shotgun;
+  fill_rect(sx1, sy, slot_w, slot_h, shotgun ? 0xFF303030u : 0xFFE0C040u);
+  fill_rect(sx2, sy, slot_w, slot_h, shotgun ? 0xFFE08040u : 0xFF303030u);
+  // Pistol: thin center bar; shotgun: three ticks.
+  fill_rect(sx1 + slot_w / 2 - 1, sy + 2, 2, slot_h - 4,
+            shotgun ? 0xFF808080u : 0xFF202020u);
+  fill_rect(sx2 + 3, sy + 2, 2, slot_h - 4, shotgun ? 0xFF202020u : 0xFF808080u);
+  fill_rect(sx2 + 6, sy + 3, 2, slot_h - 5, shotgun ? 0xFF202020u : 0xFF808080u);
+  fill_rect(sx2 + 9, sy + 2, 2, slot_h - 4, shotgun ? 0xFF202020u : 0xFF808080u);
 }
 
 
