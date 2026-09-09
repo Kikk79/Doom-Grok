@@ -37,7 +37,7 @@ struct Player {
   // Fire: LMB / Space / LCtrl / RCtrl.
   bool try_fire(const Map& map, const Input& input, bool mouse_clicked);
 
-  // Slice 3: Use (E / F) — open adjacent/facing DoorClosed within ~1 unit.
+  // Slice 3: Use (E / F) — raycast/world_to_tile ahead (~1 unit) → Map::try_open_door.
   bool try_use(Map& map, const Input& input);
 
   // Camera::set_pose follows player pose.

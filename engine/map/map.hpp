@@ -17,9 +17,11 @@ public:
   bool world_to_tile(Vec2 p, int& tx, int& ty) const;
   const std::vector<EntitySpawn>& spawns() const;
 
-  // Slice 3 — minimal runtime mutator (doors etc.). Does not rewrite the map file.
-  // Returns false if (tx,ty) is out of bounds; otherwise sets the tile and returns true.
-  bool try_set_tile(int tx, int ty, Tile t);
+  // Slice 3 — minimal runtime mutators (do not rewrite the map file).
+  // set_tile: false if OOB; otherwise writes tile and returns true.
+  bool set_tile(int tx, int ty, Tile t);
+  // try_open_door: DoorClosed → DoorOpen only; else false (incl. OOB / wrong tile).
+  bool try_open_door(int tx, int ty);
 private:
   int width_ = 0;
   int height_ = 0;
