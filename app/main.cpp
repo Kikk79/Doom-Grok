@@ -158,6 +158,7 @@ int run_smoke(const char* map_path) {
   }
   std::printf("smoke: door (%d,%d) opened, walkable=%d\n",
               door_tx, door_ty, map.is_solid(door_tx, door_ty) ? 0 : 1);
+
   Player player;
   player.health = 100;
   player.armor = 0;
@@ -190,6 +191,61 @@ int run_smoke(const char* map_path) {
     std::fprintf(stderr, "SMOKE FAIL: try_open_door should reject non-doors\n");
     return 1;
   }
+
+  // --- Slice 4 (light): spawn + Chase on LOS + hitscan kill ---
+  std::vector<AI::Monster> monsters = AI::spawn_from_map(map);
+  if (monsters.empty()) {
+    std::fprintf(stderr, "SMOKE FAIL: expected monster spawns\n");
+    return 1;
+  }
+  std::printf("smoke: spawned %zu monsters\n", monsters.size());
+  for (const auto& m : monsters) {
+    if (!m.alive || m.hp != m.max_hp || m.max_hp <= 0) {
+      std::fprintf(stderr, "SMOKE FAIL: monster hp init type_id=%d\n", m.type_id);
+      return 1;
+    }
+  }
+
+  AI::Monster& prey = monsters[0];
+  player.pos = {prey.pos.x - 2.0f, prey.pos.y};
+  player.dir = {1.0f, 0.0f};
+  if (Collision::hits_wall(map, prey.pos, player.pos)) {
+    player.pos = {7.5f, 8.5f};
+    prey.pos = {9.5f, 8.5f};
+  }
+  const float dist0 = std::hypot(prey.pos.x - player.pos.x, prey.pos.y - player.pos.y);
+  for (int i = 0; i < 60; ++i) {
+    AI::update(monsters, map, player.pos, 1.0f / 60.0f);
+  }
+  if (prey.state != AI::State::Chase) {
+    std::fprintf(stderr, "SMOKE FAIL: monster did not enter Chase on LOS\n");
+    return 1;
+  }
+  const float dist1 = std::hypot(prey.pos.x - player.pos.x, prey.pos.y - player.pos.y);
+  if (!(dist1 < dist0 - 0.05f)) {
+    std::fprintf(stderr, "SMOKE FAIL: chase did not close (%.3f -> %.3f)\n", dist0, dist1);
+    return 1;
+  }
+  std::printf("smoke: chase ok dist %.3f -> %.3f\n", dist0, dist1);
+
+  player.pos = {prey.pos.x - 1.5f, prey.pos.y};
+  player.dir = {1.0f, 0.0f};
+  prey.alive = true;
+  prey.hp = prey.max_hp;
+  int shots = 0;
+  while (prey.alive && shots < 16) {
+    if (!AI::apply_hitscan(map, monsters, player.pos, player.dir, 25)) {
+      std::fprintf(stderr, "SMOKE FAIL: hitscan missed living monster\n");
+      return 1;
+    }
+    ++shots;
+  }
+  if (prey.alive) {
+    std::fprintf(stderr, "SMOKE FAIL: monster not killed after %d shots\n", shots);
+    return 1;
+  }
+  std::printf("smoke: hitscan kill in %d shots\n", shots);
+
   std::printf("SMOKE OK\n");
   return 0;
 }
@@ -232,6 +288,7 @@ int main(int argc, char** argv) {
     SDL_DestroyWindow(window); SDL_Quit(); return 1;
   }
   std::printf("Loaded map %s (%dx%d)\n", map_path.c_str(), map.width(), map.height());
+
   Player player;
   Camera camera;
   Vec2 start{2.5f, 2.5f};
@@ -241,18 +298,17 @@ int main(int argc, char** argv) {
   }
   player.set_pose(start, facing);
   player.sync_camera(camera);
-  std::vector<AI::Agent> agents;
-  for (const auto& s : map.spawns()) {
-    if (s.kind == EntitySpawn::Kind::Monster) {
-      AI::Agent a; a.type_id = s.type_id; a.x = s.pos.x; a.y = s.pos.y;
-      agents.push_back(a);
-    }
-  }
+
+  // Slice 4: monsters from Map::spawns Kind::Monster + type_id.
+  std::vector<AI::Monster> monsters = AI::spawn_from_map(map);
+  std::printf("Monsters spawned: %zu\n", monsters.size());
+
   std::vector<ActivePickup> pickups;
   for (const auto& s : map.spawns()) {
     if (s.kind == EntitySpawn::Kind::Item) pickups.push_back({s.pos, s.type_id});
   }
   std::printf("Active pickups: %zu  health=%d\n", pickups.size(), player.health);
+
   Input input;
   Timing::FixedStep clock;
   Renderer::FrameBuffer fb;
@@ -280,13 +336,18 @@ int main(int argc, char** argv) {
     for (int i = 0; i < steps; ++i) {
       player.update(map, input, dt);
       collect_pickups(player, pickups);
-      for (auto& a : agents) AI::tick_stub(a, dt);
+      AI::update(monsters, map, player.pos, dt);
     }
     player.try_use(map, input);
-    player.try_fire(map, input, mouse_fire);
+    if (player.try_fire(map, input, mouse_fire)) {
+      if (AI::apply_hitscan(map, monsters, player.pos, player.dir, 25)) {
+        std::printf("hitscan monster hit\n");
+      }
+    }
     player.sync_camera(camera);
     player.tick_fx(static_cast<float>(frame_dt));
     Renderer::raycast_view(map, camera, fb);
+    AI::draw(fb, camera, map, monsters);
     if (player.muzzle_flash > 0.0f) apply_muzzle_flash(fb, player.muzzle_flash / 0.08f);
     draw_hud(fb, player);
     Renderer::present(renderer, texture, fb);
