@@ -91,6 +91,7 @@ std::string next_campaign_path(const std::string& current) {
 
 #include "main_rest_a.inc"
 #include "main_rest_b.inc"
+#include "main_rest_c.inc"
 }  // namespace
 
 int main(int argc, char** argv) {
