@@ -6,6 +6,7 @@
 #include "engine/timing/timing.hpp"
 #include "game/player.hpp"
 #include "ai/ai.hpp"
+#include "engine/audio/audio.hpp"
 
 #include <SDL.h>
 
@@ -89,6 +90,13 @@ std::string next_campaign_path(const std::string& current) {
   return resolve_map_path(kCampaignLevels[idx + 1]);
 }
 
+
+size_t count_alive(const std::vector<AI::Monster>& monsters) {
+  size_t n = 0;
+  for (const auto& m : monsters) if (m.alive) ++n;
+  return n;
+}
+
 #include "main_rest_a.inc"
 #include "main_rest_b.inc"
 #include "main_rest_c.inc"
@@ -136,6 +144,11 @@ int main(int argc, char** argv) {
   std::printf("Loaded map %s (%dx%d)\n", current_level.c_str(), map.width(), map.height());
   std::printf("Monsters spawned: %zu\n", monsters.size());
   std::printf("Active pickups: %zu  health=%d\n", pickups.size(), player.health);
+
+  // Slice 9 — procedural SFX; mute-safe if device/init fails (game continues).
+  if (!Audio::init()) {
+    std::printf("Audio muted (init failed or no device)\n");
+  }
 
   Input input;
   Timing::FixedStep clock;
@@ -230,20 +243,28 @@ int main(int argc, char** argv) {
     const int steps = clock.consume(frame_dt);
     const float dt = static_cast<float>(Timing::kFixedDt);
     player.apply_look(input, input.mouse_delta().x);
+    const int hp_before = player.health;
+    const size_t pickups_before = pickups.size();
     for (int i = 0; i < steps; ++i) {
       player.update(map, input, dt);
       collect_pickups(player, pickups);
       AI::update(monsters, map, player, dt);
     }
-    player.try_use(map, input);
+    if (pickups.size() < pickups_before) Audio::play(Audio::Sfx::Pickup);
+    if (player.health < hp_before) Audio::play(Audio::Sfx::Hurt);
+    if (player.try_use(map, input)) Audio::play(Audio::Sfx::Door);
     if (player.try_fire(map, input, mouse_fire)) {
+      Audio::play(Audio::Sfx::Fire);
+      const size_t alive_before = count_alive(monsters);
       if (AI::apply_hitscan(map, monsters, player.pos, player.dir, 25)) {
         std::printf("hitscan monster hit\n");
+        if (count_alive(monsters) < alive_before) Audio::play(Audio::Sfx::MonsterDeath);
       }
     }
     // Slice 6: all monsters dead → win (exit after clear also satisfies check_win).
-    if (check_win(monsters, player, map)) {
+    if (!won && check_win(monsters, player, map)) {
       won = true;
+      Audio::play(Audio::Sfx::Win);
     }
     player.sync_camera(camera);
     player.tick_fx(static_cast<float>(frame_dt));
@@ -256,6 +277,7 @@ int main(int argc, char** argv) {
     Renderer::present(renderer, texture, fb);
   }
   SDL_SetRelativeMouseMode(SDL_FALSE);
+  Audio::shutdown();
   SDL_DestroyTexture(texture);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
