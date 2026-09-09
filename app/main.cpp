@@ -242,11 +242,14 @@ int main(int argc, char** argv) {
     if (player.try_fire(map, input, mouse_fire)) {
       int alive_before = 0;
       for (const auto& mon : monsters) if (mon.alive) ++alive_before;
-      if (AI::apply_hitscan(map, monsters, player.pos, player.dir, 25)) {
-        std::printf("hitscan monster hit\n");
-        int alive_after = 0;
-        for (const auto& mon : monsters) if (mon.alive) ++alive_after;
-        if (alive_after < alive_before) Audio::play(Audio::Sfx::MonsterDeath);
+      for (const Vec2& shot_dir : player.last_shot_dirs) {
+        AI::apply_hitscan(map, monsters, player.pos, shot_dir, player.last_shot_damage);
+      }
+      int alive_after = 0;
+      for (const auto& mon : monsters) if (mon.alive) ++alive_after;
+      if (alive_after < alive_before) {
+        std::printf("hitscan monster kill(s) weapon=%d\n", static_cast<int>(player.weapon));
+        Audio::play(Audio::Sfx::MonsterDeath);
       }
     }
     // Slice 6: all monsters dead → win (exit after clear also satisfies check_win).
