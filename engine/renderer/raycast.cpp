@@ -11,7 +11,6 @@ void FrameBuffer::resize(int w, int h) {
   width = w;
   height = h;
   pixels.assign(static_cast<size_t>(w * h), 0u);
-  depth.assign(static_cast<size_t>(w), 1e30f);
 }
 
 static uint32_t shade(uint32_t rgb, float factor) {
@@ -35,8 +34,6 @@ void raycast_view(const Map& map, const Camera& cam, FrameBuffer& fb) {
     uint32_t* row = &fb.pixels[static_cast<size_t>(y * w)];
     for (int x = 0; x < w; ++x) row[x] = c;
   }
-  if (static_cast<int>(fb.depth.size()) != w) fb.depth.assign(static_cast<size_t>(w), 1e30f);
-  else std::fill(fb.depth.begin(), fb.depth.end(), 1e30f);
 
   for (int x = 0; x < w; ++x) {
     const float camera_x = 2.0f * static_cast<float>(x) / static_cast<float>(w) - 1.0f;
@@ -46,10 +43,7 @@ void raycast_view(const Map& map, const Camera& cam, FrameBuffer& fb) {
     };
 
     auto hit = Collision::raycast(map, cam.pos, ray_dir, 64.0f);
-    if (!hit.hit) {
-      fb.depth[static_cast<size_t>(x)] = 1e30f;
-      continue;
-    }
+    if (!hit.hit) continue;
 
     // Perpendicular wall distance for fisheye correction
     float perp = hit.dist;
@@ -58,15 +52,14 @@ void raycast_view(const Map& map, const Camera& cam, FrameBuffer& fb) {
     // Correct using camera direction projection
     const float inv = rdx * cam.dir.x + rdy * cam.dir.y;
     if (std::abs(inv) > 1e-6f) {
-      // Use euclidean hit distance * cos(angle) approx; recompute via cam.dir projection
-      // Collision::raycast normalizes dir; camera ray_dir may not be unit
+      // Use euclidean hit distance * cos(angle) ≈ dot(ray, dir) * |ray| but ray is unit in DDA after norm
+      // Collision::raycast normalizes dir; camera ray_dir may not be unit — recompute properly:
     }
     // Re-run distance as |hit.point - cam.pos| projected onto camera dir
     const float hx = hit.point.x - cam.pos.x;
     const float hy = hit.point.y - cam.pos.y;
     perp = hx * cam.dir.x + hy * cam.dir.y;
     if (perp < 0.05f) perp = 0.05f;
-    fb.depth[static_cast<size_t>(x)] = perp;
 
     int line_h = static_cast<int>(static_cast<float>(h) / perp);
     int draw_start = -line_h / 2 + h / 2;
@@ -93,56 +86,6 @@ void raycast_view(const Map& map, const Camera& cam, FrameBuffer& fb) {
     const uint32_t col = shade(base, atten);
     for (int y = draw_start; y <= draw_end; ++y) {
       fb.pixels[static_cast<size_t>(y * w + x)] = col;
-    }
-  }
-}
-
-void draw_billboards(const Camera& cam, FrameBuffer& fb,
-                     const std::vector<Billboard>& sprites) {
-  if (fb.width <= 0 || fb.height <= 0 || sprites.empty()) return;
-  const int w = fb.width;
-  const int h = fb.height;
-  if (static_cast<int>(fb.depth.size()) != w) return;
-
-  // Inverse camera matrix (dir, plane).
-  const float inv_det = cam.dir.x * cam.plane.y - cam.dir.y * cam.plane.x;
-  if (std::abs(inv_det) < 1e-8f) return;
-  const float inv = 1.0f / inv_det;
-
-  for (const Billboard& sp : sprites) {
-    const float rx = sp.x - cam.pos.x;
-    const float ry = sp.y - cam.pos.y;
-    // Transform to camera space: transform.x = side, transform.y = depth
-    const float transform_x = inv * (cam.dir.y * rx - cam.dir.x * ry);
-    const float transform_y = inv * (-cam.plane.y * rx + cam.plane.x * ry);
-    if (transform_y <= 0.05f) continue;  // behind camera
-
-    const int sprite_screen_x = static_cast<int>((w / 2) * (1.0f + transform_x / transform_y));
-    // Filled column / short billboard height
-    const int sprite_h = std::abs(static_cast<int>(h / transform_y));
-    const int sprite_w = std::abs(static_cast<int>((h / transform_y) * (sp.radius * 2.0f)));
-    int draw_start_y = -sprite_h / 2 + h / 2;
-    int draw_end_y = sprite_h / 2 + h / 2;
-    if (draw_start_y < 0) draw_start_y = 0;
-    if (draw_end_y >= h) draw_end_y = h - 1;
-
-    int draw_start_x = -sprite_w / 2 + sprite_screen_x;
-    int draw_end_x = sprite_w / 2 + sprite_screen_x;
-    if (draw_start_x < 0) draw_start_x = 0;
-    if (draw_end_x >= w) draw_end_x = w - 1;
-
-    float atten = 1.0f / (1.0f + transform_y * 0.12f);
-    atten = std::clamp(atten, 0.25f, 1.0f);
-    const uint32_t r = static_cast<uint32_t>(((sp.color >> 16) & 0xFF) * atten);
-    const uint32_t g = static_cast<uint32_t>(((sp.color >> 8) & 0xFF) * atten);
-    const uint32_t b = static_cast<uint32_t>((sp.color & 0xFF) * atten);
-    const uint32_t col = 0xFF000000u | (r << 16) | (g << 8) | b;
-
-    for (int stripe = draw_start_x; stripe <= draw_end_x; ++stripe) {
-      if (transform_y >= fb.depth[static_cast<size_t>(stripe)]) continue;
-      for (int y = draw_start_y; y <= draw_end_y; ++y) {
-        fb.pixels[static_cast<size_t>(y * w + stripe)] = col;
-      }
     }
   }
 }
